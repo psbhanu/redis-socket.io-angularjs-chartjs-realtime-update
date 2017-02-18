@@ -1,0 +1,77 @@
+//Port config
+const PORT = 3000;
+
+//Requires and main server objects
+var redis = require('redis');
+var socketio = require('socket.io');
+var app = require('http').createServer().listen(PORT, function(){
+	console.log('Redis - Socket.io Server Running at port ' + PORT);
+});
+var io = socketio.listen(app);
+
+//This object will contain all the channels being listened to.
+var global_channels = {};
+
+var	getRandomValue = function () {
+	//var l = data.length, previous = l ? data[l - 1] : 50;
+	//var y = previous + Math.random() * 10 - 5;
+	//return y < 0 ? 0 : y > 100 ? 100 : y;
+	return Math.random() * 100 - 5;
+}
+var pub = redis.createClient();
+setInterval(function(){
+	//pub.publish("message", getRandomValue());
+	pub.publish("updates", getRandomValue());
+}, 1000);
+
+//Server Logic goes here
+io.on('connection', function(socketconnection){
+	
+	//All the channels this connection subscribes to
+	socketconnection.connected_channels = {}
+	
+	//Subscribe request from client
+	socketconnection.on('subscribe', function(channel_name){
+		//Set up Redis Channel
+		if (global_channels.hasOwnProperty(channel_name)){
+			//If channel is already present, make this socket connection one of its listeners
+			global_channels[channel_name].listeners[socketconnection.id] = socketconnection;
+		}
+		else{
+			//Else, initialize new Redis Client as a channel and make it subscribe to channel_name
+			global_channels[channel_name] = redis.createClient();
+			global_channels[channel_name].subscribe(channel_name);
+			global_channels[channel_name].listeners = {};
+			//Add this connection to the listeners
+			global_channels[channel_name].listeners[socketconnection.id] = socketconnection;
+			//Tell this new Redis client to send published messages to all of its listeners
+			global_channels[channel_name].on('message', function(channel, message){
+				Object.keys(global_channels[channel_name].listeners).forEach(function(key){
+					global_channels[channel_name].listeners[key].send(message);
+				});
+			});
+			//global_channels[channel_name].publish("message", getRandomValue());
+		}
+		socketconnection.connected_channels[channel_name] = global_channels[channel_name];
+	});
+	
+	//Unsubscribe request from client
+	socketconnection.on('unsubscribe', function(channel_name){
+		if (socketconnection.connected_channels.hasOwnProperty(channel_name)){
+			//If this connection is indeed subscribing to channel_name
+			//Delete this connection from the Redis Channel's listeners
+			delete global_channels[channel_name].listeners[socketconnection.id];
+			//Delete channel from this connection's connected_channels
+			delete socketconnection.connected_channels[channel_name];
+		}
+	});
+	
+	//Disconnect request from client
+	socketconnection.on('disconnect', function(){
+		//Remove this connection from listeners' lists of all channels it subscribes to
+		Object.keys(socketconnection.connected_channels).forEach(function(channel_name){
+			delete global_channels[channel_name].listeners[socketconnection.id];
+		});
+	});
+	
+});

@@ -1,0 +1,15 @@
+{
+  "name": "redis.js",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "psbhanu <psbhanu@outlook.com> (http://psbhanu.com)",
+  "license": "ISC",
+  "dependencies": {
+    "redis": "2.6.5",
+    "socket.io": "1.7.3"
+  }
+}
